@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from '@/lib/axios';
 import { Button } from '@/components/ui/button';
-import { Plus, Search, Filter, Eye, CheckCircle, Clock, DollarSign } from 'lucide-react';
+import { Plus, Search, Eye, CheckCircle, Clock, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
 import { Benefit } from '@/types';
-import { formatDate, formatCurrency } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
 
 const Benefits: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
