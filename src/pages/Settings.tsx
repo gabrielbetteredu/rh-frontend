@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import axios from 'axios';
+import axios from '../lib/axios';
 import { 
   Settings as SettingsIcon, 
   Mail, 

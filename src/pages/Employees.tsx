@@ -20,6 +20,7 @@ import {
   Download,
   Upload
 } from "lucide-react";
+import axios from '../lib/axios';
 
 interface Employee {
   _id: string;
@@ -37,74 +38,6 @@ interface Employee {
   status: 'Active' | 'Inactive';
   workSchedule: string;
 }
-
-// Mock data for frontend-only mode
-const mockEmployees: Employee[] = [
-  {
-    _id: '1',
-    firstName: 'João',
-    lastName: 'Silva',
-    email: 'joao.silva@company.com',
-    cpf: '123.456.789-00',
-    employeeId: 'EMP001',
-    department: 'Engineering',
-    position: 'Software Developer',
-    hireDate: '2023-01-15',
-    employmentType: 'CLT',
-    baseSalary: 5000,
-    phone: '(11) 99999-9999',
-    status: 'Active',
-    workSchedule: '9:00-18:00'
-  },
-  {
-    _id: '2',
-    firstName: 'Maria',
-    lastName: 'Santos',
-    email: 'maria.santos@company.com',
-    cpf: '987.654.321-00',
-    employeeId: 'EMP002',
-    department: 'HR',
-    position: 'HR Manager',
-    hireDate: '2022-08-20',
-    employmentType: 'CLT',
-    baseSalary: 6000,
-    phone: '(11) 88888-8888',
-    status: 'Active',
-    workSchedule: '8:00-17:00'
-  },
-  {
-    _id: '3',
-    firstName: 'Pedro',
-    lastName: 'Oliveira',
-    email: 'pedro.oliveira@company.com',
-    cpf: '456.789.123-00',
-    employeeId: 'EMP003',
-    department: 'Sales',
-    position: 'Sales Representative',
-    hireDate: '2023-03-10',
-    employmentType: 'PJ',
-    baseSalary: 4000,
-    phone: '(11) 77777-7777',
-    status: 'Active',
-    workSchedule: '8:30-17:30'
-  },
-  {
-    _id: '4',
-    firstName: 'Ana',
-    lastName: 'Costa',
-    email: 'ana.costa@company.com',
-    cpf: '789.123.456-00',
-    employeeId: 'EMP004',
-    department: 'Marketing',
-    position: 'Marketing Specialist',
-    hireDate: '2022-11-05',
-    employmentType: 'CLT',
-    baseSalary: 4500,
-    phone: '(11) 66666-6666',
-    status: 'Inactive',
-    workSchedule: '9:00-18:00'
-  }
-];
 
 const Employees = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -140,10 +73,8 @@ const Employees = () => {
   const fetchEmployees = async () => {
     try {
       setLoading(true);
-      console.log('Fetching employees (mock data)...');
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setEmployees([...mockEmployees]);
+      const response = await axios.get('/employees');
+      setEmployees(response.data.data || []);
     } catch (error) {
       console.error('Error fetching employees:', error);
       toast({
@@ -159,37 +90,32 @@ const Employees = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
+      setLoading(true);
       if (editingEmployee) {
         // Update existing employee
-        setEmployees(prev => prev.map(emp => 
-          emp._id === editingEmployee._id 
-            ? { ...emp, ...formData, baseSalary: Number(formData.baseSalary) }
-            : emp
-        ));
+        await axios.put(`/employees/${editingEmployee._id}`, {
+          ...formData,
+          baseSalary: Number(formData.baseSalary)
+        });
         toast({
           title: "Success",
           description: "Employee updated successfully",
         });
       } else {
         // Add new employee
-        const newEmployee: Employee = {
-          _id: Date.now().toString(),
+        await axios.post('/employees', {
           ...formData,
           baseSalary: Number(formData.baseSalary)
-        };
-        setEmployees(prev => [...prev, newEmployee]);
+        });
         toast({
           title: "Success",
           description: "Employee added successfully",
         });
       }
-      
       setIsAddDialogOpen(false);
       setEditingEmployee(null);
       resetForm();
+      fetchEmployees();
     } catch (error) {
       console.error('Error saving employee:', error);
       toast({
@@ -197,19 +123,21 @@ const Employees = () => {
         description: "Failed to save employee",
         variant: "destructive",
       });
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleDelete = async (id: string) => {
     try {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
+      setLoading(true);
+      await axios.delete(`/employees/${id}`);
       setEmployees(prev => prev.filter(emp => emp._id !== id));
       toast({
         title: "Success",
         description: "Employee deleted successfully",
       });
+      fetchEmployees();
     } catch (error) {
       console.error('Error deleting employee:', error);
       toast({
@@ -217,6 +145,8 @@ const Employees = () => {
         description: "Failed to delete employee",
         variant: "destructive",
       });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -649,50 +579,21 @@ const Employees = () => {
                     <TableCell>{employee.employeeId}</TableCell>
                     <TableCell>{employee.department}</TableCell>
                     <TableCell>{employee.position}</TableCell>
+                    <TableCell>{employee.employmentType}</TableCell>
                     <TableCell>
-                      <Badge variant={employee.employmentType === 'CLT' ? 'default' : 'secondary'}>
-                        {employee.employmentType}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={employee.status === 'Active' ? 'default' : 'destructive'}>
+                      <Badge className={employee.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
                         {employee.status}
                       </Badge>
                     </TableCell>
-                    <TableCell>R$ {employee.baseSalary.toLocaleString()}</TableCell>
+                    <TableCell>R$ {employee.baseSalary.toLocaleString('pt-BR')}</TableCell>
                     <TableCell>
-                      <div className="flex items-center space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleEdit(employee)}
-                        >
-                          <Edit className="h-4 w-4" />
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => handleEdit(employee)}>
+                          <Edit className="w-4 h-4 mr-1" /> Edit
                         </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="outline" size="sm">
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete Employee</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Are you sure you want to delete {employee.firstName} {employee.lastName}? This action cannot be undone.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => handleDelete(employee._id)}
-                                className="bg-red-600 hover:bg-red-700"
-                              >
-                                Delete
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                        <Button size="sm" variant="outline" onClick={() => handleDelete(employee._id)}>
+                          <Trash2 className="w-4 h-4 mr-1" /> Delete
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>

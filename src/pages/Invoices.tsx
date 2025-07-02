@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,27 +32,136 @@ type Invoice = {
 const Invoices = () => {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [generatingReport, setGeneratingReport] = useState(false);
+  const [sendingRequestEmails, setSendingRequestEmails] = useState(false);
+  const [consolidationStats, setConsolidationStats] = useState<{received: number, pending: number, overdue: number}>({received: 0, pending: 0, overdue: 0});
 
   // Fetch invoices from API
-  const { data: invoices = [], isLoading } = useQuery<Invoice[]>({
+  const { data: invoices = [], isLoading, refetch } = useQuery<Invoice[]>({
     queryKey: ['invoices'],
     queryFn: async () => {
       const response = await axios.get('/invoices');
-      // Adapt the response to match the UI's expected fields if needed
-      // Here we assume the backend returns an array of invoices with the required fields
       return response.data.data;
     },
   });
+
+  // Fetch consolidation stats
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await axios.get('/invoices/stats');
+        setConsolidationStats(response.data.data || {received: 0, pending: 0, overdue: 0});
+      } catch (error) {
+        setConsolidationStats({received: 0, pending: 0, overdue: 0});
+      }
+    };
+    fetchStats();
+  }, [invoices]);
 
   const filteredInvoices = invoices.filter((invoice) =>
     invoice.contractor.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleSendReminder = (contractorName: string) => {
-    toast({
-      title: "Reminder Sent",
-      description: `Invoice reminder sent to ${contractorName}`,
-    });
+  const handleSendReminder = async (invoiceId: string, contractorName: string) => {
+    try {
+      await axios.post(`/invoices/${invoiceId}/remind`);
+      toast({
+        title: "Reminder Sent",
+        description: `Invoice reminder sent to ${contractorName}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: `Failed to send reminder to ${contractorName}`,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDownload = async (invoiceId: string, filename: string) => {
+    try {
+      const response = await axios.get(`/invoices/${invoiceId}/download`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to download invoice",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!uploadFile) return;
+    try {
+      setUploading(true);
+      const formData = new FormData();
+      formData.append('file', uploadFile);
+      await axios.post('/invoices/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      toast({
+        title: "Success",
+        description: "Invoice uploaded successfully",
+      });
+      setUploadFile(null);
+      refetch();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to upload invoice",
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSendRequestEmails = async () => {
+    try {
+      setSendingRequestEmails(true);
+      await axios.post('/invoices/request-emails');
+      toast({
+        title: "Success",
+        description: "Invoice request emails sent",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to send request emails",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingRequestEmails(false);
+    }
+  };
+
+  const handleGenerateReport = async () => {
+    try {
+      setGeneratingReport(true);
+      const response = await axios.get('/invoices/consolidation-report', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'consolidation-report.xlsx');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to generate report",
+        variant: "destructive",
+      });
+    } finally {
+      setGeneratingReport(false);
+    }
   };
 
   const getStatusIcon = (status: string) => {
@@ -162,14 +271,14 @@ const Invoices = () => {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handleSendReminder(invoice.contractor)}
+                                onClick={() => handleSendReminder(invoice._id, invoice.contractor)}
                               >
                                 <Mail className="mr-1 h-3 w-3" />
                                 Remind
                               </Button>
                             )}
                             {invoice.status === 'received' && (
-                              <Button size="sm" variant="outline">
+                              <Button size="sm" variant="outline" onClick={() => handleDownload(invoice._id, `invoice_${invoice.contractor.replace(/\s+/g, '_').toLowerCase()}.pdf`)}>
                                 <Download className="mr-1 h-3 w-3" />
                                 Download
                               </Button>
@@ -191,7 +300,7 @@ const Invoices = () => {
                   <CardDescription>Invoice request email campaign</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <Button className="w-full">
+                  <Button className="w-full" onClick={handleSendRequestEmails}>
                     <Mail className="mr-2 h-4 w-4" />
                     Send Invoice Request Emails
                   </Button>
@@ -207,7 +316,7 @@ const Invoices = () => {
                   <CardDescription>Consolidation and follow-up</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <Button className="w-full" variant="outline">
+                  <Button className="w-full" variant="outline" onClick={handleGenerateReport}>
                     <FileText className="mr-2 h-4 w-4" />
                     Generate Consolidation Report
                   </Button>
@@ -229,21 +338,21 @@ const Invoices = () => {
                 <div className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
                     <div className="p-4 bg-green-50 rounded-lg">
-                      <p className="text-2xl font-bold text-green-600">8</p>
+                      <p className="text-2xl font-bold text-green-600">{consolidationStats.received}</p>
                       <p className="text-sm text-gray-600">Received</p>
                     </div>
                     <div className="p-4 bg-yellow-50 rounded-lg">
-                      <p className="text-2xl font-bold text-yellow-600">3</p>
+                      <p className="text-2xl font-bold text-yellow-600">{consolidationStats.pending}</p>
                       <p className="text-sm text-gray-600">Pending</p>
                     </div>
                     <div className="p-4 bg-red-50 rounded-lg">
-                      <p className="text-2xl font-bold text-red-600">1</p>
+                      <p className="text-2xl font-bold text-red-600">{consolidationStats.overdue}</p>
                       <p className="text-sm text-gray-600">Overdue</p>
                     </div>
                   </div>
 
                   <div className="flex space-x-4">
-                    <Button className="flex-1">
+                    <Button className="flex-1" onClick={handleGenerateReport}>
                       <Download className="mr-2 h-4 w-4" />
                       Generate Report
                     </Button>

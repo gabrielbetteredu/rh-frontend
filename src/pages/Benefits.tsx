@@ -15,6 +15,7 @@ import { CalendarIcon, Upload, Download, Send, CheckCircle, AlertCircle, DollarS
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '../hooks/use-toast';
+import axios from '../lib/axios';
 
 interface Benefit {
   _id: string;
@@ -90,123 +91,6 @@ interface Statistics {
   paidCount: number;
 }
 
-// Mock data for frontend-only mode
-const mockBenefits: Benefit[] = [
-  {
-    _id: '1',
-    employeeId: 'EMP001',
-    month: '12',
-    year: 2024,
-    valeRefeicao: {
-      enabled: true,
-      dailyValue: 25.00,
-      businessDays: 22,
-      saturdays: 0,
-      totalDays: 22,
-      totalAmount: 550.00,
-      deductions: [
-        {
-          date: '2024-12-15',
-          amount: 25.00,
-          reason: 'Falta',
-          type: 'Absence'
-        }
-      ],
-      finalAmount: 525.00,
-      scheduleFile: {
-        url: '/uploads/schedule1.pdf',
-        uploadedAt: '2024-12-01T10:00:00Z'
-      }
-    },
-    valeTransporte: {
-      enabled: true,
-      fixedAmount: 300.00,
-      dailyValue: 15.00,
-      totalDays: 22,
-      totalAmount: 330.00,
-      deductions: [],
-      finalAmount: 330.00,
-      addressChanged: false
-    },
-    mobilidade: {
-      enabled: false,
-      monthlyValue: 0
-    },
-    paymentStatus: 'Calculated',
-    paymentMethod: 'Flash',
-    flashPayment: {
-      sent: false,
-      flashStatus: 'Pending'
-    },
-    employeeData: {
-      firstName: 'João',
-      lastName: 'Silva',
-      employeeId: 'EMP001',
-      department: 'Engineering',
-      position: 'Software Developer'
-    },
-    createdAt: '2024-12-01T09:00:00Z',
-    updatedAt: '2024-12-01T09:00:00Z'
-  },
-  {
-    _id: '2',
-    employeeId: 'EMP002',
-    month: '12',
-    year: 2024,
-    valeRefeicao: {
-      enabled: true,
-      dailyValue: 25.00,
-      businessDays: 22,
-      saturdays: 0,
-      totalDays: 22,
-      totalAmount: 550.00,
-      deductions: [],
-      finalAmount: 550.00
-    },
-    valeTransporte: {
-      enabled: true,
-      fixedAmount: 300.00,
-      dailyValue: 15.00,
-      totalDays: 22,
-      totalAmount: 330.00,
-      deductions: [],
-      finalAmount: 330.00,
-      addressChanged: false
-    },
-    mobilidade: {
-      enabled: true,
-      monthlyValue: 200.00
-    },
-    paymentStatus: 'Pending',
-    paymentMethod: 'Flash',
-    flashPayment: {
-      sent: false,
-      flashStatus: 'Pending'
-    },
-    employeeData: {
-      firstName: 'Maria',
-      lastName: 'Santos',
-      employeeId: 'EMP002',
-      department: 'HR',
-      position: 'HR Manager'
-    },
-    createdAt: '2024-12-01T09:00:00Z',
-    updatedAt: '2024-12-01T09:00:00Z'
-  }
-];
-
-const mockStatistics: Statistics = {
-  totalVR: 1100.00,
-  totalVT: 660.00,
-  totalMobilidade: 200.00,
-  totalAmount: 1960.00,
-  employeeCount: 2,
-  pendingCount: 1,
-  calculatedCount: 1,
-  approvedCount: 0,
-  paidCount: 0
-};
-
 const Benefits: React.FC = () => {
   const [benefits, setBenefits] = useState<Benefit[]>([]);
   const [statistics, setStatistics] = useState<Statistics | null>(null);
@@ -239,9 +123,8 @@ const Benefits: React.FC = () => {
   const fetchBenefits = async () => {
     try {
       setLoading(true);
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setBenefits([...mockBenefits]);
+      const response = await axios.get(`/benefits?month=${selectedMonth}&year=${selectedYear}`);
+      setBenefits(response.data.data || []);
     } catch (error) {
       console.error('Error fetching benefits:', error);
       toast({
@@ -256,9 +139,8 @@ const Benefits: React.FC = () => {
 
   const fetchStatistics = async () => {
     try {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 300));
-      setStatistics(mockStatistics);
+      const response = await axios.get(`/benefits/statistics?month=${selectedMonth}&year=${selectedYear}`);
+      setStatistics(response.data.data || null);
     } catch (error) {
       console.error('Error fetching statistics:', error);
     }
@@ -266,20 +148,14 @@ const Benefits: React.FC = () => {
 
   const handleCalculateBenefit = async (benefit: Benefit) => {
     try {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Update the benefit status locally
-      setBenefits(prev => prev.map(b => 
-        b._id === benefit._id 
-          ? { ...b, paymentStatus: 'Calculated' as const }
-          : b
-      ));
-      
+      setLoading(true);
+      await axios.post(`/benefits/${benefit._id}/calculate`);
       toast({
         title: "Sucesso",
         description: "Benefício calculado com sucesso"
       });
+      fetchBenefits();
+      fetchStatistics();
     } catch (error) {
       console.error('Error calculating benefit:', error);
       toast({
@@ -287,44 +163,26 @@ const Benefits: React.FC = () => {
         description: "Falha ao calcular benefício",
         variant: "destructive"
       });
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleAddDeduction = async () => {
     if (!selectedBenefit) return;
-    
     try {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Add deduction locally
-      const newDeduction = {
-        date: deductionData.date.toISOString().split('T')[0],
+      setLoading(true);
+      await axios.post(`/benefits/${selectedBenefit._id}/deductions`, {
+        benefitType: deductionData.benefitType,
+        date: deductionData.date,
         amount: deductionData.amount,
         reason: deductionData.reason,
         type: deductionData.type
-      };
-      
-      setBenefits(prev => prev.map(b => {
-        if (b._id === selectedBenefit._id) {
-          const updatedBenefit = { ...b };
-          if (deductionData.benefitType === 'VR') {
-            updatedBenefit.valeRefeicao.deductions.push(newDeduction);
-            updatedBenefit.valeRefeicao.finalAmount -= deductionData.amount;
-          } else {
-            updatedBenefit.valeTransporte.deductions.push(newDeduction);
-            updatedBenefit.valeTransporte.finalAmount -= deductionData.amount;
-          }
-          return updatedBenefit;
-        }
-        return b;
-      }));
-      
+      });
       toast({
         title: "Sucesso",
         description: "Dedução adicionada com sucesso"
       });
-      
       setShowDeductionDialog(false);
       setDeductionData({
         benefitType: 'VR',
@@ -333,6 +191,8 @@ const Benefits: React.FC = () => {
         reason: '',
         type: 'Absence'
       });
+      fetchBenefits();
+      fetchStatistics();
     } catch (error) {
       console.error('Error adding deduction:', error);
       toast({
@@ -340,13 +200,15 @@ const Benefits: React.FC = () => {
         description: "Falha ao adicionar dedução",
         variant: "destructive"
       });
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleUploadSchedule = async () => {
     if (!selectedBenefit || !scheduleData.file) return;
-    
     try {
+      setLoading(true);
       const formData = new FormData();
       formData.append('schedule', scheduleData.file);
       formData.append('employeeId', selectedBenefit.employeeId);
@@ -354,14 +216,13 @@ const Benefits: React.FC = () => {
       formData.append('year', selectedYear.toString());
       formData.append('businessDays', scheduleData.businessDays.toString());
       formData.append('saturdays', scheduleData.saturdays.toString());
-      
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
+      await axios.post(`/benefits/${selectedBenefit._id}/schedule`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
       toast({
         title: "Sucesso",
         description: "Cronograma enviado com sucesso"
       });
-      
       setShowScheduleDialog(false);
       setScheduleData({
         businessDays: 22,
@@ -369,6 +230,7 @@ const Benefits: React.FC = () => {
         file: null
       });
       fetchBenefits();
+      fetchStatistics();
     } catch (error) {
       console.error('Error uploading schedule:', error);
       toast({
@@ -376,19 +238,21 @@ const Benefits: React.FC = () => {
         description: "Falha ao enviar cronograma",
         variant: "destructive"
       });
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleApproveBenefits = async (benefitIds: string[]) => {
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
+      setLoading(true);
+      await axios.post('/benefits/approve', { benefitIds });
       toast({
         title: "Sucesso",
         description: `${benefitIds.length} benefícios aprovados`
       });
-      
       fetchBenefits();
+      fetchStatistics();
     } catch (error) {
       console.error('Error approving benefits:', error);
       toast({
@@ -396,19 +260,21 @@ const Benefits: React.FC = () => {
         description: "Falha ao aprovar benefícios",
         variant: "destructive"
       });
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleSendToFlash = async (benefitIds: string[]) => {
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
+      setLoading(true);
+      await axios.post('/benefits/flash', { benefitIds });
       toast({
         title: "Sucesso",
         description: `${benefitIds.length} benefícios enviados para Flash`
       });
-      
       fetchBenefits();
+      fetchStatistics();
     } catch (error) {
       console.error('Error sending to Flash:', error);
       toast({
@@ -416,6 +282,8 @@ const Benefits: React.FC = () => {
         description: "Falha ao enviar para Flash",
         variant: "destructive"
       });
+    } finally {
+      setLoading(false);
     }
   };
 
