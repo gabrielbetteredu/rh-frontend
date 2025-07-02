@@ -40,6 +40,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
 
+    useEffect(() => {
+        console.log("AuthProvider: Setting up mock authentication...");
+
+        // For frontend-only mode, automatically set a demo user
+        const demoUser = {
+            id: "demo-user-id",
+            email: "admin@example.com",
+            name: "Demo Admin",
+            role: "admin",
+        };
+
+        // Set demo token in localStorage
+        setUser(demoUser);
+        console.log("AuthProvider: Demo user set:", demoUser);
+        setLoading(false);
+    }, []);
+
     const login = async (email: string, password: string): Promise<boolean> => {
         try {
             setLoading(true);
@@ -50,6 +67,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             const { token, user } = response.data;
             localStorage.setItem("token", token);
             setUser(user);
+            window.location.href = "/";
             return true;
         } catch (error: any) {
             console.error("Login error:", error);
